@@ -1,7 +1,9 @@
 import concurrent.futures
 import datetime
 import requests
-
+import os
+from subprocess import Popen, PIPE
+import signal
 URLS = ['http://www.foxnews.com/',
         'http://www.cnn.com/',
         'http://europe.wsj.com/',
@@ -39,8 +41,8 @@ def load_url(url, **kwargs):
     print('Loading URL {} '.format(url))
     try:
         if 'becollege' in url:
-            # import time
-            # time.sleep(30)
+            import time
+            time.sleep(35)
             print('Inside be college loop@@@@')
             response = requests.get(url, timeout=timeout)
         else:
@@ -55,6 +57,21 @@ def load_url(url, **kwargs):
         if '' not in response:
             return str(response.status_code)
 
+def kill_processes(main_pid):
+    print('Inside kill process')
+    print('Main PID : '+str(main_pid))
+    process = Popen(['ps', '-eo', 'pid,args'], stdout=PIPE, stderr=PIPE)
+    stdout, notused = process.communicate()
+    pidList = []
+    for line in stdout.splitlines():
+        pid, cmdline = line.split(' ', 1)
+        if __file__.split('/')[-1] in cmdline and str(pid) !=str(main_pid):
+            print pid
+            print cmdline
+            pidList.append(int(pid))
+    print(pidList)
+    for proc_id in pidList:
+        os.kill(int(proc_id), signal.SIGTERM)
 
 def jobs_processing_paralell(list_URL, timeout_to_request, timeout_function):
     output = []
@@ -69,26 +86,31 @@ def jobs_processing_paralell(list_URL, timeout_to_request, timeout_function):
                 print(data)
         except concurrent.futures._base.TimeoutError as exc:
             print('%r generated an exception: {}'.format(exc))
-            stop_process_pool(executor)
+            executor.shutdown(wait=False)
         finally:
             return output
 
+def exit_gracefully(pid):
+    os.kill(pid,signal.SIGTERM)
 
 def main():
     # We can use a with statement to ensure threads are cleaned up promptly
     time_start = datetime.datetime.now()
     print('started:  {}'.format(time_start))
     output = []
-    TIMEOUT_FUNC = 2
-    TIMEOUT_REQUEST = 0.01
+    TIMEOUT_FUNC = 10
+    TIMEOUT_REQUEST = 5
+    MAIN_PID = os.getpid()
     output = jobs_processing_paralell(list_URL=URLS, timeout_to_request=TIMEOUT_REQUEST, timeout_function=TIMEOUT_FUNC)
     print('Output here')
     print(output)
+    kill_processes(MAIN_PID)
     if len(output) == 0:
         print('There is no response from the request!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         return
     time_end = datetime.datetime.now()
     print('Time Taken :' + str(time_end - time_start))
+    exit_gracefully(MAIN_PID)
 
 
 if __name__ == "__main__":
